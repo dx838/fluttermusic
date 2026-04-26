@@ -2,6 +2,9 @@ class CacheKey {
   /// 歌单广场
   static String openMusicOrderUrls = 'open_music_order_urls';
 
+  /// 歌单广场数据缓存
+  static String openMusicOrderDataCache = 'open_music_order_data_cache';
+
   /// 云歌单配置信息
   static String cloudMusicOrderSetting = 'cloud_music_order_setting';
 
