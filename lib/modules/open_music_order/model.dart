@@ -44,6 +44,10 @@ class OpenMusicOrderModel extends ChangeNotifier {
 
   Future<void> load() async {
     await _loadCache();
+    if (dataList.isNotEmpty) {
+      loading = false;
+      notifyListeners();
+    }
 
     final List<String> urls = await getMusicOrderUrl();
     final newDataList = <MusicOrderItem>[];
@@ -66,7 +70,7 @@ class OpenMusicOrderModel extends ChangeNotifier {
       }
     }));
 
-    if (newDataList.isNotEmpty || !hasError) {
+    if (newDataList.isNotEmpty) {
       dataList.clear();
       dataList.addAll(newDataList);
       await _saveCache();
@@ -77,6 +81,8 @@ class OpenMusicOrderModel extends ChangeNotifier {
   }
 
   Future<void> reload() async {
+    final cachedData = List<MusicOrderItem>.from(dataList);
+
     loading = true;
     notifyListeners();
 
@@ -101,11 +107,13 @@ class OpenMusicOrderModel extends ChangeNotifier {
       }
     }));
 
-    if (hasError && dataList.isEmpty) {
-      BotToast.showSimpleNotification(title: "歌单源错误");
-    }
-
-    if (newDataList.isNotEmpty) {
+    if (hasError) {
+      if (cachedData.isEmpty) {
+        BotToast.showSimpleNotification(title: "歌单源错误");
+      }
+      dataList.clear();
+      dataList.addAll(cachedData);
+    } else if (newDataList.isNotEmpty) {
       dataList.clear();
       dataList.addAll(newDataList);
       await _saveCache();

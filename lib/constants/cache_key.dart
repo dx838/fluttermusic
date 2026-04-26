@@ -5,6 +5,9 @@ class CacheKey {
   /// 歌单广场数据缓存
   static String openMusicOrderDataCache = 'open_music_order_data_cache';
 
+  /// 用户歌单数据缓存前缀
+  static String userMusicOrderCachePrefix = 'user_music_order_cache_';
+
   /// 云歌单配置信息
   static String cloudMusicOrderSetting = 'cloud_music_order_setting';
 

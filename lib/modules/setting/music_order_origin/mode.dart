@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:bbmusic/constants/cache_key.dart';
 import 'package:bbmusic/database/database.dart';
 import 'package:bbmusic/database/uuid.dart';
 import 'package:bbmusic/modules/user_music_order/common.dart';
@@ -11,6 +12,7 @@ import 'package:bbmusic/utils/logs.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 const uuid = Uuid();
@@ -127,14 +129,62 @@ class MusicOrderOriginSettingModel extends ChangeNotifier {
     await _loadItem(current);
   }
 
+  Future<List<MusicOrderItem>> _loadCache(String originName) async {
+    try {
+      final localStorage = await SharedPreferences.getInstance();
+      final cacheKey = '${CacheKey.userMusicOrderCachePrefix}$originName';
+      final cacheStr = localStorage.getString(cacheKey);
+      if (cacheStr != null && cacheStr.isNotEmpty) {
+        final List<dynamic> cacheData = jsonDecode(cacheStr);
+        return cacheData.map((item) => MusicOrderItem.fromJson(item)).toList();
+      }
+    } catch (e) {
+      logs.e("加载歌单缓存失败: $originName", error: e);
+    }
+    return [];
+  }
+
+  Future<void> _saveCache(String originName, List<MusicOrderItem> data) async {
+    try {
+      final localStorage = await SharedPreferences.getInstance();
+      final cacheKey = '${CacheKey.userMusicOrderCachePrefix}$originName';
+      final cacheData = data.map((e) => e.toJson()).toList();
+      await localStorage.setString(cacheKey, jsonEncode(cacheData));
+    } catch (e) {
+      logs.e("保存歌单缓存失败: $originName", error: e);
+    }
+  }
+
   // 根据配置加载歌单列表
-  Future<void> _loadItem(UserMusicOrderOriginItem umo) async {
+  Future<void> _loadItem(UserMusicOrderOriginItem umo, {bool fromCacheOnly = false}) async {
     umo.loading = true;
     notifyListeners();
     try {
       final config = id2OriginInfo(umo.id)?.config;
       await umo.service.initConfig(config ?? {});
-      umo.list = umo.service.getList();
+
+      final originName = umo.service.name;
+      final cachedList = await _loadCache(originName);
+      if (cachedList.isNotEmpty) {
+        umo.list = Future.value(cachedList);
+        notifyListeners();
+      }
+
+      try {
+        final freshList = await umo.service.getList();
+        if (freshList.isNotEmpty) {
+          umo.list = Future.value(freshList);
+          await _saveCache(originName, freshList);
+        } else if (cachedList.isEmpty) {
+          umo.list = Future.value([]);
+        }
+      } catch (e) {
+        if (cachedList.isEmpty) {
+          umo.list = Future.value([]);
+          BotToast.showText(text: "加载歌单源失败");
+          logs.e("加载歌单源失败", error: e);
+        }
+      }
     } catch (e) {
       BotToast.showText(text: "加载歌单源失败");
       logs.e("加载歌单源失败", error: e);
