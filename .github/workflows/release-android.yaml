@@ -50,7 +50,7 @@ jobs:
 
       - name: 强制更新 Gradle Wrapper 为 8.5
         run: |
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Disable Jetifier
         run: |
