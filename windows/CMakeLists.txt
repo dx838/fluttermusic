@@ -10,6 +10,12 @@ set(BINARY_NAME "bbmusic")
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
 
+# Disable developer warnings from plugins
+set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+
+# Suppress CMP0175 warning from media_kit_libs_windows_audio plugin
+cmake_policy(SET CMP0175 OLD)
+
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTICONFIG)
