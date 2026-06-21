@@ -537,8 +537,8 @@ class BBPlayer {
   void _updateLocalStorage() {
     // 取消之前的定时器
     _timer?.cancel();
-    // 延迟500微秒执行，避免频繁写入
-    _timer = Timer(const Duration(microseconds: 3000), () async {
+    // ⚠️ 修复：延迟 3 秒执行，避免频繁写入
+    _timer = Timer(const Duration(milliseconds: 3000), () async {
       final localStorage = await SharedPreferences.getInstance();
       // 保存当前歌曲
       localStorage.setString(
@@ -554,6 +554,11 @@ class BBPlayer {
       localStorage.setStringList(
         _storageKeyHistoryList,
         _playerHistory,
+      );
+      // 保存播放列表（轻量级备份，用于快速恢复）
+      localStorage.setString(
+        _storageKeyPlayerList,
+        jsonEncode(playerList.map((m) => m.toJson()).toList()),
       );
     });
   }
