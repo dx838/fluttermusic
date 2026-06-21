@@ -214,7 +214,6 @@ class BBMusicSource extends StreamAudioSource {
   /// 释放资源
   ///
   /// 在切歌时被 `BBPlayer._play` 调用 `audio.clearAudioSources()` 触发
-  @override
   Future<void> dispose() async {
     // 取消响应订阅
     await _responseSub?.cancel();
@@ -236,7 +235,6 @@ class BBMusicSource extends StreamAudioSource {
     }
     _isInit = false;
     _sourceLength = null;
-    super.dispose();
   }
 }
 

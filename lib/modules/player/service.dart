@@ -75,7 +75,6 @@ class AudioPlayerHandler extends BaseAudioHandler {
   }
 
   /// 销毁（修复 M3：释放所有流订阅与定时器）
-  @override
   Future<void> dispose() async {
     // 取消所有流订阅
     for (final s in _subs) {
@@ -86,7 +85,6 @@ class AudioPlayerHandler extends BaseAudioHandler {
     _debounceTimer?.cancel();
     // 释放底层播放器
     await player.dispose();
-    super.dispose();
   }
   
   /// 播放歌曲
