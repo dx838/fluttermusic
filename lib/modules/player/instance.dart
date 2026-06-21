@@ -33,6 +33,8 @@ final _storageKeyPlayerMode = CacheKey.playerMode;
 final _storageKeyPosition = CacheKey.playerPosition;
 /// 缓存键 - 播放历史列表
 final _storageKeyHistoryList = CacheKey.playerHistoryList;
+/// 缓存键 - 播放列表（轻量级备份）
+final _storageKeyPlayerList = 'player_list_backup';
 
 /// 哔哔音乐播放器核心类
 ///
@@ -143,8 +145,10 @@ class BBPlayer {
   }
 
   /// 同步缓存播放列表（用于应用退出时）
+  ///
+  /// 优化：将 playerList 序列化到 SharedPreferences（内存级写入）
+  /// 并在退出时一次性批量写入数据库（减少磁盘操作）
   Future<void> syncCache() async {
-    // 立即执行缓存，不延迟
     final localStorage = await SharedPreferences.getInstance();
     // 保存当前歌曲
     localStorage.setString(
@@ -161,10 +165,36 @@ class BBPlayer {
       _storageKeyHistoryList,
       _playerHistory,
     );
+    // 保存播放列表（轻量级序列化，写入 SharedPreferences 内存）
+    localStorage.setString(
+      _storageKeyPlayerList,
+      jsonEncode(playerList.map((m) => m.toJson()).toList()),
+    );
     // 保存播放进度
     await _cachePosition();
-    // 确保数据库写入完成
-    await db.close();
+    // 批量写入数据库（仅一次磁盘操作）
+    await _persistPlayerListToDb();
+  }
+
+  /// 批量写入播放列表到数据库
+  ///
+  /// 只在 syncCache() 调用时执行，避免频繁磁盘操作
+  Future<void> _persistPlayerListToDb() async {
+    await db.playerListEntity.deleteAll();
+    if (playerList.isNotEmpty) {
+      await db.managers.playerListEntity.bulkCreate((o) {
+        return playerList.map((m) {
+          return o(
+            id: m.id,
+            cover: Value(m.cover),
+            name: m.name,
+            duration: m.duration,
+            author: Value(m.author),
+            origin: m.origin.value,
+          );
+        });
+      });
+    }
   }
 
   /// 播放错误处理
@@ -442,49 +472,25 @@ class BBPlayer {
   }
 
   /// 添加歌曲到播放列表
-  /// 
+  ///
   /// [musics]: 要添加的歌曲列表
-  Future<void> addPlayerList(List<MusicItem> musics) async {
-    // 先移除已存在的歌曲，避免重复
+  ///
+  /// 优化：只更新内存，不立即写库；由 syncCache() 在关键时机批量写入
+  void addPlayerList(List<MusicItem> musics) {
     removePlayerList(musics);
-    // 添加到播放列表
     playerList.addAll(musics);
-    // 从数据库中删除已存在的歌曲
-    await db.managers.playerListEntity
-        .filter((f) => f.id.isIn(musics.map((m) => m.id)))
-        .delete();
-    // 批量添加到数据库
-    await db.managers.playerListEntity.bulkCreate((o) {
-      return musics.map((m) {
-        return o(
-          id: m.id,
-          cover: Value(m.cover),
-          name: m.name,
-          duration: m.duration,
-          author: Value(m.author),
-          origin: m.origin.value,
-        );
-      });
-    });
   }
 
   /// 从播放列表中移除歌曲
-  /// 
+  ///
   /// [musics]: 要移除的歌曲列表
-  Future<void> removePlayerList(List<MusicItem> musics) async {
-    // 从内存播放列表中移除
+  void removePlayerList(List<MusicItem> musics) {
     playerList.removeWhere((w) => musics.where((e) => e.id == w.id).isNotEmpty);
-    // 从数据库中删除
-    final ids = musics.map((m) => m.id);
-    await db.managers.playerListEntity.filter((f) => f.id.isIn(ids)).delete();
   }
 
   /// 清空播放列表
-  Future<void> clearPlayerList() async {
-    // 清空内存播放列表
+  void clearPlayerList() {
     playerList.clear();
-    // 清空数据库中的播放列表
-    await db.playerListEntity.deleteAll();
   }
 
   /// 添加到播放历史（用于随机播放）
@@ -592,8 +598,32 @@ class BBPlayer {
       _playerHistory.addAll(h);
     }
 
-    // 重载播放列表（等待完成）
+    // 优先从 SharedPreferences 恢复播放列表（更快，内存级读取）
+    await _restorePlayerListFromLocalStorage(localStorage);
+  }
+
+  /// 从 SharedPreferences 恢复播放列表
+  ///
+  /// 优先级：SharedPreferences > Database > 兜底（current 加入列表）
+  Future<void> _restorePlayerListFromLocalStorage(SharedPreferences localStorage) async {
+    // 1) 优先从 SharedPreferences 恢复（内存级，速度快）
+    final playerListJson = localStorage.getString(_storageKeyPlayerList);
+    if (playerListJson != null && playerListJson.isNotEmpty) {
+      try {
+        final list = jsonDecode(playerListJson) as List<dynamic>;
+        playerList.clear();
+        playerList.addAll(list.map((e) => MusicItem.fromJson(e as Map<String, dynamic>)));
+        return;
+      } catch (_) {}
+    }
+
+    // 2) 降级到数据库
     await reloadPlayerList();
+
+    // 3) 兜底：如果列表为空但有 current，把 current 加入列表
+    if (playerList.isEmpty && current != null) {
+      playerList.add(current!);
+    }
   }
 
   /// 重载播放列表
