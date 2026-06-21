@@ -561,7 +561,7 @@ class BBPlayer {
   /// 初始化本地存储
   Future<void> _initLocalStorage() async {
     final localStorage = await SharedPreferences.getInstance();
-    
+
     // 读取当前歌曲
     String? c = localStorage.getString(_storageKeyCurrent);
     if (c != null && c.isNotEmpty) {
@@ -574,15 +574,6 @@ class BBPlayer {
         duration: data['duration'],
         origin: OriginType.getByValue(data['origin']),
       );
-
-      // 设置音频源，但不播放
-      _play(music: current!, isPlay: false).then((res) {
-        // 恢复播放进度
-        final pos = localStorage.getInt(_storageKeyPosition) ?? 0;
-        if (pos > 0) {
-          audio.seek(Duration(milliseconds: pos));
-        }
-      });
     }
 
     // 读取播放模式
@@ -598,8 +589,19 @@ class BBPlayer {
       _playerHistory.addAll(h);
     }
 
-    // 优先从 SharedPreferences 恢复播放列表（更快，内存级读取）
+    // ⚠️ 关键调整：先恢复播放列表，再设置音频源
     await _restorePlayerListFromLocalStorage(localStorage);
+
+    // 设置音频源，但不播放
+    if (current != null) {
+      _play(music: current!, isPlay: false).then((res) {
+        // 恢复播放进度
+        final pos = localStorage.getInt(_storageKeyPosition) ?? 0;
+        if (pos > 0) {
+          audio.seek(Duration(milliseconds: pos));
+        }
+      });
+    }
   }
 
   /// 从 SharedPreferences 恢复播放列表
