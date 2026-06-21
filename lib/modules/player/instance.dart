@@ -130,6 +130,31 @@ class BBPlayer {
     _timer?.cancel();
   }
 
+  /// 同步缓存播放列表（用于应用退出时）
+  Future<void> syncCache() async {
+    // 立即执行缓存，不延迟
+    final localStorage = await SharedPreferences.getInstance();
+    // 保存当前歌曲
+    localStorage.setString(
+      _storageKeyCurrent,
+      current != null ? jsonEncode(current) : "",
+    );
+    // 保存播放模式
+    localStorage.setString(
+      _storageKeyPlayerMode,
+      playerMode.value.toString(),
+    );
+    // 保存播放历史
+    localStorage.setStringList(
+      _storageKeyHistoryList,
+      _playerHistory,
+    );
+    // 保存播放进度
+    await _cachePosition();
+    // 确保数据库写入完成
+    await db.close();
+  }
+
   /// 播放错误处理
   /// 
   /// [e]: 错误信息
@@ -552,8 +577,8 @@ class BBPlayer {
       _playerHistory.addAll(h);
     }
 
-    // 重载播放列表
-    reloadPlayerList();
+    // 重载播放列表（等待完成）
+    await reloadPlayerList();
   }
 
   /// 重载播放列表

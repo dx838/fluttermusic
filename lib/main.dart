@@ -56,6 +56,12 @@ ThemeData theme = ThemeData(
 /// 音频播放器处理器实例
 final _playerHandler = AudioPlayerHandler();
 
+/// 应用退出时的清理操作
+Future<void> _onAppExit() async {
+  await _playerHandler.player.syncCache();
+  await _playerHandler.stop();
+}
+
 /// 应用入口函数
 /// 
 /// 主要初始化步骤：
@@ -107,6 +113,8 @@ void main() async {
       rewindInterval: Duration(seconds: 10),
     ),
   );
+  
+  WidgetsBinding.instance.addObserver(_AppLifecycleObserver());
   
   // 运行应用
   runApp(
@@ -165,4 +173,15 @@ void main() async {
       ),
     ),
   );
+}
+
+class _AppLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused || 
+        state == AppLifecycleState.detached) {
+      await _onAppExit();
+    }
+  }
 }
