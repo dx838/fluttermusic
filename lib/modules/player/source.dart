@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 // 音频服务库
 import 'package:audio_service/audio_service.dart';
@@ -17,16 +17,27 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart';
 // 音频播放库
 import 'package:just_audio/just_audio.dart';
+// 路径工具
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 /// 音频缓存管理器
-final audioCacheManage = CacheManager(Config("bbmusicMediaCache"));
+/// 修复 M7：增加 maxNrOfCacheObjects 上限，避免只增不减
+final audioCacheManage = CacheManager(
+  Config(
+    "bbmusicMediaCache",
+    stalePeriod: const Duration(days: 30),
+    maxNrOfCacheObjects: 200,
+  ),
+);
 
 /// 哔哔音乐音频源
-/// 
-/// 继承自StreamAudioSource，实现了音频流的获取、缓存和管理
+///
+/// 修复 M4/M5/M6：
+/// - 不再持有整首歌字节 `_bytes`，改用文件流式提供
+/// - 下载完成后立即落盘缓存，未命中缓存时写到临时目录再 stream
+/// - HTTP `Client` 在 finally 中统一关闭
 class BBMusicSource extends StreamAudioSource {
-  /// 音频数据字节列表
-  final List<int> _bytes = [];
   /// 音频源长度
   int? _sourceLength;
   /// 内容类型
@@ -37,6 +48,12 @@ class BBMusicSource extends StreamAudioSource {
   bool _isInit = false;
   /// 缓存键
   String get _cacheKey => music2cacheKey(music);
+  /// 临时文件（仅在未命中缓存时存在）
+  File? _tempFile;
+  /// HTTP 客户端（用于切歌时主动取消）
+  Client? _httpClient;
+  /// 响应订阅（用于主动取消）
+  StreamSubscription<List<int>>? _responseSub;
 
   /// 获取媒体项标签
   @override
@@ -48,156 +65,185 @@ class BBMusicSource extends StreamAudioSource {
     );
   }
 
-  /// 获取音乐流
-  /// 
-  /// [music]: 音乐项
-  /// [callback]: 数据回调函数
-  /// 
-  /// 返回值：StreamedResponse对象
-  Future<StreamedResponse> getMusicStream(
-    MusicItem music,
-    Function(List<int> data) callback,
-  ) async {
-    final completer = Completer<StreamedResponse>();
-
-    // 获取音乐URL
-    service.getMusicUrl(music.id).then((musicUrl) {
-      // 创建HTTP请求
-      var request = Request('GET', Uri.parse(musicUrl.url));
-      // 添加请求头
-      request.headers.addAll(musicUrl.headers ?? {});
-      Client client = Client();
-      // 发送请求
-      client.send(request).then((response) {
-        var isStart = false;
-        // 监听响应流
-        response.stream.listen((List<int> data) {
-          // 回调数据
-          callback(data);
-          if (!isStart) {
-            // 第一次接收到数据时完成completer
-            completer.complete(response);
-            isStart = true;
-          }
-        }, onDone: () async {
-          // 缓冲完成后将歌曲添加到缓存
-          var bytes = Uint8List.fromList(_bytes);
-          var ext = musicUrl.url.split('?').first.split('.').last;
-          await audioCacheManage.putFile(
-            musicUrl.url,
-            bytes,
-            key: _cacheKey,
-            fileExtension: ext,
-            maxAge: const Duration(days: 365 * 100), // 缓存100年
-          );
-        }, onError: (error) {
-          completer.completeError(error);
-        });
-      }).catchError((error) {
-        completer.completeError(error);
-      });
-    }).catchError((error) {
-      completer.completeError(error);
-    });
-    return completer.future;
-  }
-
   /// 构造函数
-  /// 
+  ///
   /// [music]: 音乐项
   BBMusicSource(this.music);
 
-  /// 初始化音频源
-  _init() async {
-    if (_isInit) return;
+  /// 下载到缓存文件或临时文件
+  ///
+  /// 命中缓存：直接返回缓存文件对象
+  /// 未命中：使用 HTTP 流式下载到临时文件，完成后再写入 cache
+  Future<File> _download() async {
+    // 1) 先检查缓存
+    final cacheFile = await audioCacheManage.getFileFromCache(_cacheKey);
+    if (cacheFile?.file != null && cacheFile!.file.existsSync()) {
+      return cacheFile.file;
+    }
+
+    // 2) 命中失败，下载到临时文件
+    final tmpDir = await getTemporaryDirectory();
+    final ext = 'mp3';
+    final tempPath = p.join(
+      tmpDir.path,
+      'bbmusic_${DateTime.now().microsecondsSinceEpoch}.$ext',
+    );
+    final tmpFile = File(tempPath);
+    _tempFile = tmpFile;
+    final sink = tmpFile.openWrite();
+
     try {
-      // 获取音乐流
-      var resp = await getMusicStream(music, (List<int> data) {
-        _bytes.addAll(data);
-      });
-      // 设置源长度和内容类型
-      _sourceLength = resp.contentLength;
-      _contentType = resp.headers['content-type'] ?? 'video/mp4';
-      _isInit = true;
+      // 获取音乐 URL
+      final musicUrl = await service.getMusicUrl(music.id);
+      // 创建 HTTP 请求
+      final request = Request('GET', Uri.parse(musicUrl.url));
+      request.headers.addAll(musicUrl.headers ?? {});
+      final client = Client();
+      _httpClient = client;
+      final response = await client.send(request);
+
+      _sourceLength = response.contentLength;
+      _contentType = response.headers['content-type'] ?? 'video/mp4';
+
+      // 流式写入临时文件
+      final completer = Completer<void>();
+      _responseSub = response.stream.listen(
+        (List<int> data) {
+          sink.add(data);
+        },
+        onDone: () async {
+          await sink.flush();
+          await sink.close();
+          // 写入缓存（异步，不阻塞主流程）
+          unawaited(_writeToCache(musicUrl.url, tmpFile, ext));
+          completer.complete();
+        },
+        onError: (error, stack) {
+          // 出错时关闭 sink 便于删除
+          sink.close().catchError((_) {});
+          if (!completer.isCompleted) {
+            completer.completeError(error, stack);
+          }
+        },
+        cancelOnError: true,
+      );
+      await completer.future;
+      return tmpFile;
     } catch (e) {
-      // 显示错误提示
-      BotToast.showText(text: '音频源加载失败');
-      logs.e("音频源加载失败", error: e);
+      // 出错时清理临时文件
+      await sink.close().catchError((_) {});
+      if (await tmpFile.exists()) {
+        await tmpFile.delete().catchError((_) {});
+      }
+      _tempFile = null;
       rethrow;
     }
   }
 
-  /// 获取缓存文件
-  /// 
-  /// [start]: 开始位置
-  /// [end]: 结束位置
-  /// 
-  /// 返回值：StreamAudioResponse对象，若缓存不存在则返回null
-  Future<StreamAudioResponse?> _getCacheFile(int? start, int? end) async {
-    // 读取缓存
-    final cacheFile = await audioCacheManage.getFileFromCache(_cacheKey);
-
-    if (cacheFile?.file != null) {
-      if (cacheFile!.file.existsSync()) {
-        var file = cacheFile.file;
-        final sourceLength = file.lengthSync();
-        return StreamAudioResponse(
-          rangeRequestsSupported: true,
-          sourceLength: sourceLength,
-          contentLength: (end ?? sourceLength) - (start ?? 0),
-          offset: start,
-          contentType: "video/mp4",
-          stream: file.openRead(start, end).asBroadcastStream(),
-        );
-      }
+  /// 写缓存（容错：失败不影响主播放）
+  Future<void> _writeToCache(String url, File file, String ext) async {
+    try {
+      final bytes = await file.readAsBytes();
+      await audioCacheManage.putFile(
+        url,
+        bytes,
+        key: _cacheKey,
+        fileExtension: ext,
+        maxAge: const Duration(days: 30),
+      );
+    } catch (e) {
+      logs.e('写缓存失败', error: e);
     }
-    return null;
+  }
+
+  /// 初始化音频源
+  Future<File> _init() async {
+    if (_isInit && _sourceLength != null) {
+      // 已初始化且有文件可用
+      if (_tempFile != null && _tempFile!.existsSync()) return _tempFile!;
+      final cacheFile = await audioCacheManage.getFileFromCache(_cacheKey);
+      if (cacheFile?.file != null) return cacheFile!.file;
+    }
+    try {
+      final file = await _download();
+      _isInit = true;
+      return file;
+    } catch (e) {
+      BotToast.showText(text: '音频源加载失败');
+      logs.e('音频源加载失败', error: e);
+      rethrow;
+    }
   }
 
   /// 请求音频数据
-  /// 
+  ///
   /// [start]: 开始位置
   /// [end]: 结束位置
-  /// 
-  /// 返回值：StreamAudioResponse对象
+  ///
+  /// 返回值：StreamAudioResponse 对象
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
-    // 检查缓存
-    final cacheFile = await _getCacheFile(start, end);
-    if (cacheFile != null) {
-      // 缓存命中，返回缓存文件
-      return cacheFile;
-    }
-    
-    // 初始化音频源
-    await _init();
-    start ??= 0;
-    // print("开始长度: $start");
-    // print("结束长度: $end");
-    // print("bytes.length: ${_bytes.length}");
-    end ??= _bytes.length;
-
-    // 轮询 _bytes 的长度, 等待 _bytes 有足够的数据
-    while (_bytes.length < end) {
-      await Future.delayed(const Duration(milliseconds: 300));
+    // 优先检查缓存
+    final cacheFile = await audioCacheManage.getFileFromCache(_cacheKey);
+    if (cacheFile?.file != null && cacheFile!.file.existsSync()) {
+      final file = cacheFile.file;
+      final sourceLength = file.lengthSync();
+      return StreamAudioResponse(
+        rangeRequestsSupported: true,
+        sourceLength: sourceLength,
+        contentLength: (end ?? sourceLength) - (start ?? 0),
+        offset: start,
+        contentType: _contentType,
+        stream: file.openRead(start, end).asBroadcastStream(),
+      );
     }
 
-    // 返回音频响应
+    // 未命中缓存：下载到临时文件，再以流式方式返回
+    final file = await _init();
+    final sourceLength = file.lengthSync();
     return StreamAudioResponse(
-      sourceLength: _sourceLength,
-      contentLength: end - start,
-      offset: start,
-      stream: Stream.value(_bytes.sublist(start, end)),
-      contentType: _contentType,
       rangeRequestsSupported: true,
+      sourceLength: sourceLength,
+      contentLength: (end ?? sourceLength) - (start ?? 0),
+      offset: start,
+      contentType: _contentType,
+      stream: file.openRead(start, end).asBroadcastStream(),
     );
+  }
+
+  /// 释放资源
+  ///
+  /// 在切歌时被 `BBPlayer._play` 调用 `audio.clearAudioSources()` 触发
+  @override
+  Future<void> dispose() async {
+    // 取消响应订阅
+    await _responseSub?.cancel();
+    _responseSub = null;
+    // 关闭 HTTP 客户端（修复 M5）
+    _httpClient?.close();
+    _httpClient = null;
+    // 删除临时文件
+    final f = _tempFile;
+    _tempFile = null;
+    if (f != null) {
+      try {
+        if (await f.exists()) {
+          await f.delete();
+        }
+      } catch (e) {
+        logs.e('删除临时文件失败', error: e);
+      }
+    }
+    _isInit = false;
+    _sourceLength = null;
+    super.dispose();
   }
 }
 
 /// 将音乐项转换为缓存键
-/// 
+///
 /// [music]: 音乐项
-/// 
+///
 /// 返回值：缓存键字符串
 String music2cacheKey(MusicItem music) {
   return "${music.origin.value}-${music.id}";

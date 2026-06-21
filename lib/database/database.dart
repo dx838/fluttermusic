@@ -28,17 +28,26 @@ part 'database.g.dart';
   SearchHistoryEntity,
 ])
 class AppDatabase extends _$AppDatabase {
-  /// 构造函数
-  /// 
-  /// [executor]: 可选的查询执行器，若为null则使用默认连接
-  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
+  /// 私有构造
+  /// 修复 M10：单例化数据库连接，避免多处持有不同连接导致 native 句柄泄漏
+  AppDatabase._(QueryExecutor e) : super(e);
+
+  /// 单例实例
+  static AppDatabase? _instance;
+
+  /// 获取单例（默认连接）
+  factory AppDatabase() => _instance ??= AppDatabase._(_openConnection());
+
+  /// 显式传入执行器时也共享同一实例（如测试场景）
+  factory AppDatabase.withExecutor(QueryExecutor e) =>
+      _instance ??= AppDatabase._(e);
 
   /// 数据库架构版本
   @override
   int get schemaVersion => 1;
 
   /// 打开数据库连接
-  /// 
+  ///
   /// 返回值：数据库查询执行器
   static QueryExecutor _openConnection() {
     return driftDatabase(

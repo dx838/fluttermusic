@@ -26,10 +26,13 @@ class PlayerModel extends ChangeNotifier {
   
   /// 后台播放服务实例
   AudioHandler? _playerService;
-  
+
   /// 音频播放器处理器实例
   AudioPlayerHandler? _playerHandler;
-  
+
+  /// 播放器状态流订阅（修复 M2：单一订阅管理）
+  StreamSubscription? _stateSub;
+
   /// 获取当前播放的歌曲
   MusicItem? get current => _playerHandler?.current;
   
@@ -52,7 +55,7 @@ class PlayerModel extends ChangeNotifier {
   }
 
   /// 初始化播放器模型
-  /// 
+  ///
   /// [playerHandler]: 音频播放器处理器实例
   /// [playerService]: 后台播放服务实例
   init({
@@ -62,14 +65,25 @@ class PlayerModel extends ChangeNotifier {
     // 初始化后台服务和处理器
     _playerHandler = playerHandler;
     _playerService = playerService;
-    
+
     // 初始化播放器
     await playerHandler.player.init();
-    
+
+    // 修复 M2：先 cancel 旧订阅，再建立新的单一订阅
+    await _stateSub?.cancel();
     // 监听播放器状态变化，通知UI更新
-    _audio?.playerStateStream.listen((event) {
+    _stateSub = _audio?.playerStateStream.listen((event) {
       notifyListeners();
     });
+  }
+
+  /// 销毁播放器模型（修复 M2：在 Provider 释放时调用）
+  @override
+  void dispose() {
+    // 取消状态订阅，释放闭包引用
+    _stateSub?.cancel();
+    _stateSub = null;
+    super.dispose();
   }
 
   /// 播放歌曲

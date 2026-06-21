@@ -62,6 +62,15 @@ Future<void> _onAppExit() async {
   await _playerHandler.stop();
 }
 
+/// 应用进入后台时的资源降级（修复 M11/M12）
+///
+/// - 主动清空图片内存缓存
+/// - 数据库连接保持，由 detached 状态时统一关闭
+void _onAppBackground() {
+  // 清空 Flutter 图片内存缓存
+  PaintingBinding.instance.imageCache.clear();
+}
+
 /// 应用入口函数
 /// 
 /// 主要初始化步骤：
@@ -179,8 +188,12 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
   @override
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused || 
-        state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.paused) {
+      // 进入后台：先同步缓存、释放非必要资源
+      await _playerHandler.player.syncCache();
+      _onAppBackground();
+    } else if (state == AppLifecycleState.detached) {
+      // 销毁：完整清理
       await _onAppExit();
     }
   }

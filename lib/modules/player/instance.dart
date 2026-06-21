@@ -35,7 +35,7 @@ final _storageKeyPosition = CacheKey.playerPosition;
 final _storageKeyHistoryList = CacheKey.playerHistoryList;
 
 /// 哔哔音乐播放器核心类
-/// 
+///
 /// 实现了播放器的核心功能，包括：
 /// - 播放、暂停、上一首、下一首
 /// - 播放列表管理
@@ -70,21 +70,26 @@ class BBPlayer {
   /// 数据库实例
   final db = AppDatabase();
 
+  /// 统一管理的流订阅列表
+  /// 修复 M1/M8/M9：所有 audio.stream.listen 必须保存到该列表，
+  /// 并在 dispose() 中统一 cancel
+  final List<StreamSubscription<dynamic>> _subs = [];
+
   /// 初始化播放器
   Future<void> init() async {
     // 初始化自动关闭功能
     autoClose = AutoCloseMusic(onPause: () {
       pause();
     });
-    
+
     // 初始化本地存储
     await _initLocalStorage();
-    
+
     // 创建节流函数，避免播放结束事件重复触发
     var throttleEndNext = Throttle(const Duration(seconds: 1));
 
     // 监听播放状态变化
-    audio.playerStateStream.listen((state) {
+    _subs.add(audio.playerStateStream.listen((state) {
       // 加载状态
       if (state.processingState == ProcessingState.loading) {
         isLoading = true;
@@ -107,27 +112,34 @@ class BBPlayer {
         });
       }
       // notifyListeners();
-    });
+    }));
     // audio.bufferedPositionStream.listen((duration) {
     //   print('缓冲进度：$duration;  总进度：${audio.bufferedPositionStream}');
     // });
     // 记住播放进度
     var t = DateTime.now();
-    audio.positionStream.listen((event) {
+    _subs.add(audio.positionStream.listen((event) {
       var n = DateTime.now();
       if (t.add(const Duration(seconds: 15)).isBefore(n)) {
         _cachePosition();
         t = n;
       }
-    });
+    }));
   }
 
   /// 销毁播放器
-  void dispose() {
+  Future<void> dispose() async {
+    // 取消所有流订阅（修复 M1/M8/M9）
+    for (final s in _subs) {
+      await s.cancel();
+    }
+    _subs.clear();
     // 释放音频播放器资源
-    audio.dispose();
+    await audio.dispose();
     // 取消定时器
     _timer?.cancel();
+    // 清空播放历史，释放闭包内引用
+    _playerHistory.clear();
   }
 
   /// 同步缓存播放列表（用于应用退出时）
@@ -486,11 +498,14 @@ class BBPlayer {
   }
 
   /// 内部播放方法
-  /// 
+  ///
   /// [music]: 要播放的歌曲
   /// [isPlay]: 是否立即播放
   Future<void> _play({MusicItem? music, bool isPlay = true}) async {
     if (music != null) {
+      // 先停止当前播放并释放旧的音频源（修复 M4：切歌前释放旧 source）
+      await audio.stop();
+      await audio.clearAudioSources();
       // 设置音频源
       await audio.setAudioSources([BBMusicSource(music)]);
     }
