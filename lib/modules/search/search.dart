@@ -4,7 +4,7 @@ import 'package:bbmusic/components/sheet/bottom_sheet.dart';
 import 'package:bbmusic/database/database.dart';
 import 'package:bbmusic/modules/music_order/utils.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:bbmusic/components/text_tags/tags.dart';
 import 'package:bbmusic/modules/music_order/detail.dart';
@@ -143,7 +143,7 @@ class _SearchViewState extends State<SearchView> {
       await db.managers.searchHistoryEntity.create((o) {
         return o(
           name: keyword,
-          createdAt: Value(DateTime.now()),
+          createdAt: drift.Value(DateTime.now()),
         );
       });
       final allList = await db.managers.searchHistoryEntity
