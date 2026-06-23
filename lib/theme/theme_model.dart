@@ -4,8 +4,8 @@ import 'package:bbmusic/constants/cache_key.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 主题模式
-enum ThemeMode {
+/// 应用主题模式（区分于 Flutter 内置的 ThemeMode）
+enum AppThemeMode {
   /// 浅色（白天）
   light,
 
@@ -26,7 +26,7 @@ enum ThemeMode {
 /// - 根据当前模式计算实际生效的 `Brightness`
 /// - 定时切换模式下，监听时间到达时自动切换主题
 class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
-  ThemeMode _mode = ThemeMode.light;
+  AppThemeMode _mode = AppThemeMode.light;
 
   /// 定时切换起始时间（白天开始，24h 制，时/分）
   int _lightStartHour = 6;
@@ -41,7 +41,7 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
   /// 定时切换定时器
   Timer? _timer;
 
-  ThemeMode get mode => _mode;
+  AppThemeMode get mode => _mode;
   int get lightStartHour => _lightStartHour;
   int get lightStartMinute => _lightStartMinute;
   int get darkStartHour => _darkStartHour;
@@ -50,13 +50,13 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
   /// 当前实际亮度
   Brightness get brightness {
     switch (_mode) {
-      case ThemeMode.light:
+      case AppThemeMode.light:
         return Brightness.light;
-      case ThemeMode.dark:
+      case AppThemeMode.dark:
         return Brightness.dark;
-      case ThemeMode.system:
+      case AppThemeMode.system:
         return WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      case ThemeMode.timed:
+      case AppThemeMode.timed:
         return _computeTimedBrightness(DateTime.now());
     }
   }
@@ -74,9 +74,9 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
   void _loadFromPrefs() {
     final modeName = _prefs?.getString(CacheKey.themeMode);
     if (modeName != null) {
-      _mode = ThemeMode.values.firstWhere(
+      _mode = AppThemeMode.values.firstWhere(
         (e) => e.name == modeName,
-        orElse: () => ThemeMode.light,
+        orElse: () => AppThemeMode.light,
       );
     }
     _lightStartHour = _prefs?.getInt(CacheKey.themeLightStartHour) ?? 6;
@@ -119,7 +119,7 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
   /// 启动/重启定时调度
   void _scheduleTimerIfNeeded() {
     _timer?.cancel();
-    if (_mode != ThemeMode.timed) return;
+    if (_mode != AppThemeMode.timed) return;
 
     // 计算到下一次切换的时间点
     final now = DateTime.now();
@@ -153,7 +153,7 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// 切换主题模式
-  Future<void> setMode(ThemeMode mode) async {
+  Future<void> setMode(AppThemeMode mode) async {
     _mode = mode;
     await _prefs?.setString(CacheKey.themeMode, mode.name);
     _scheduleTimerIfNeeded();
@@ -182,7 +182,7 @@ class ThemeModel extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangePlatformBrightness() {
-    if (_mode == ThemeMode.system) {
+    if (_mode == AppThemeMode.system) {
       _refresh();
     }
   }

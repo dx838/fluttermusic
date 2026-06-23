@@ -103,10 +103,10 @@ class _ThemeSettingTile extends StatelessWidget {
     return Consumer<ThemeModel>(
       builder: (context, themeModel, child) {
         final modeLabel = switch (themeModel.mode) {
-          ThemeMode.light => '浅色（白天）',
-          ThemeMode.dark => '深色（黑夜）',
-          ThemeMode.system => '跟随系统',
-          ThemeMode.timed => '定时切换',
+          AppThemeMode.light => '浅色（白天）',
+          AppThemeMode.dark => '深色（黑夜）',
+          AppThemeMode.system => '跟随系统',
+          AppThemeMode.timed => '定时切换',
         };
 
         return ListTile(
@@ -136,7 +136,7 @@ class _ThemeDialog extends StatefulWidget {
 }
 
 class _ThemeDialogState extends State<_ThemeDialog> {
-  late ThemeMode _selectedMode;
+  late AppThemeMode _selectedMode;
   late int _lightStartHour;
   late int _lightStartMinute;
   late int _darkStartHour;
@@ -156,7 +156,7 @@ class _ThemeDialogState extends State<_ThemeDialog> {
   @override
   Widget build(BuildContext context) {
     final themeModel = context.read<ThemeModel>();
-    final showTimePickers = _selectedMode == ThemeMode.timed;
+    final showTimePickers = _selectedMode == AppThemeMode.timed;
 
     return AlertDialog(
       title: const Text('主题设置'),
@@ -167,28 +167,28 @@ class _ThemeDialogState extends State<_ThemeDialog> {
             _buildRadioListTile(
               title: '浅色（白天）',
               icon: Icons.light_mode,
-              value: ThemeMode.light,
+              value: AppThemeMode.light,
               groupValue: _selectedMode,
               onChanged: (v) => setState(() => _selectedMode = v),
             ),
             _buildRadioListTile(
               title: '深色（黑夜）',
               icon: Icons.dark_mode,
-              value: ThemeMode.dark,
+              value: AppThemeMode.dark,
               groupValue: _selectedMode,
               onChanged: (v) => setState(() => _selectedMode = v),
             ),
             _buildRadioListTile(
               title: '跟随系统',
               icon: Icons.brightness_auto,
-              value: ThemeMode.system,
+              value: AppThemeMode.system,
               groupValue: _selectedMode,
               onChanged: (v) => setState(() => _selectedMode = v),
             ),
             _buildRadioListTile(
               title: '定时切换',
               icon: Icons.schedule,
-              value: ThemeMode.timed,
+              value: AppThemeMode.timed,
               groupValue: _selectedMode,
               onChanged: (v) => setState(() => _selectedMode = v),
             ),
@@ -229,7 +229,7 @@ class _ThemeDialogState extends State<_ThemeDialog> {
         FilledButton(
           onPressed: () async {
             await themeModel.setMode(_selectedMode);
-            if (_selectedMode == ThemeMode.timed) {
+            if (_selectedMode == AppThemeMode.timed) {
               await themeModel.setLightStart(
                 hour: _lightStartHour,
                 minute: _lightStartMinute,
@@ -252,11 +252,11 @@ class _ThemeDialogState extends State<_ThemeDialog> {
   Widget _buildRadioListTile({
     required String title,
     required IconData icon,
-    required ThemeMode value,
-    required ThemeMode groupValue,
-    required ValueChanged<ThemeMode> onChanged,
+    required AppThemeMode value,
+    required AppThemeMode groupValue,
+    required ValueChanged<AppThemeMode> onChanged,
   }) {
-    return RadioListTile<ThemeMode>(
+    return RadioListTile<AppThemeMode>(
       value: value,
       groupValue: groupValue,
       onChanged: (v) {
@@ -277,7 +277,7 @@ class _TimePickerRow extends StatelessWidget {
   final String label;
   final int hour;
   final int minute;
-  final ValueChanged<int, int> onChanged;
+  final void Function(int, int) onChanged;
 
   const _TimePickerRow({
     required this.label,
