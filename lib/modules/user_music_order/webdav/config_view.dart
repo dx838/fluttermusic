@@ -30,6 +30,16 @@ class _WebDAVConfigViewState extends State<WebDAVConfigView> {
     _init();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _urlController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _filepathController.dispose();
+    super.dispose();
+  }
+
   _init() async {
     _urlController.text = widget.value?[WebDAVOriginConst.configFieldUrl] ?? '';
     _usernameController.text =

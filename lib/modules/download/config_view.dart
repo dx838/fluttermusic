@@ -18,6 +18,13 @@ class _DownloadConfigViewState extends State<DownloadConfigView> {
   }
 
   @override
+  void dispose() {
+    _parallelCountController.dispose();
+    _downloadPathController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

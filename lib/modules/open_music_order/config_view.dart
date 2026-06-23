@@ -24,6 +24,12 @@ class _OpenMusicOrderConfigViewState extends State<OpenMusicOrderConfigView> {
     _init();
   }
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   _init() async {
     final list = await getMusicOrderUrl();
     setState(() {

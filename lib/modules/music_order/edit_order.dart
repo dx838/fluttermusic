@@ -59,6 +59,14 @@ class _EditMusicOrderState extends State<EditMusicOrder> {
   }
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _coverController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

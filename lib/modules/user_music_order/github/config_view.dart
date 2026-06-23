@@ -30,6 +30,16 @@ class _GithubConfigViewState extends State<GithubConfigView> {
     _init();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _tokenController.dispose();
+    _repoUrlController.dispose();
+    _branchController.dispose();
+    _filepathController.dispose();
+    super.dispose();
+  }
+
   _init() async {
     _repoUrlController.text =
         widget.value?[GithubOriginConst.configFieldRepoUrl] ?? '';

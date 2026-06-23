@@ -121,6 +121,12 @@ class _ConfigViewState extends State<ConfigView> {
     }
   }
 
+  @override
+  void dispose() {
+    _subNameController.dispose();
+    super.dispose();
+  }
+
   _saveHandler() async {}
 
   _updateConfig(Map<String, dynamic> config) {

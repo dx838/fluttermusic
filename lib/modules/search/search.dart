@@ -151,6 +151,8 @@ class _SearchViewState extends State<SearchView> {
   @override
   void dispose() {
     _keywordController.dispose();
+    _scrollController.dispose();
+    _debounceTimer?.cancel();
     _focusNode.unfocus();
     _focusNode.dispose();
     super.dispose();
