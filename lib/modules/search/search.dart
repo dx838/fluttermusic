@@ -133,6 +133,8 @@ class _SearchViewState extends State<SearchView> {
     });
   }
 
+  static const int _maxSearchHistoryCount = 20;
+
   updateSearchHistory(String keyword, {bool isDelete = false}) async {
     await db.managers.searchHistoryEntity
         .filter((f) => f.name.equals(keyword))
@@ -144,7 +146,23 @@ class _SearchViewState extends State<SearchView> {
           createdAt: Value(DateTime.now()),
         );
       });
+      final allList = await db.managers.searchHistoryEntity
+          .orderBy((o) => o.createdAt.desc())
+          .get();
+      if (allList.length > _maxSearchHistoryCount) {
+        final toDelete = allList.sublist(_maxSearchHistoryCount);
+        for (final item in toDelete) {
+          await db.managers.searchHistoryEntity
+              .filter((f) => f.name.equals(item.name))
+              .delete();
+        }
+      }
     }
+    await getSearchHistory();
+  }
+
+  clearSearchHistory() async {
+    await db.managers.searchHistoryEntity.delete();
     await getSearchHistory();
   }
 
@@ -176,41 +194,76 @@ class _SearchViewState extends State<SearchView> {
     return Container(
       padding: const EdgeInsets.only(left: 10, right: 10),
       width: double.infinity,
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: _searchHistory.map((keyword) {
-          return InkWell(
-            borderRadius: const BorderRadius.all(Radius.circular(4)),
-            onTap: () {
-              _keywordController.text = keyword;
-              _searchHandler(true);
-            },
-            // 长按删除
-            onLongPress: () {
-              openBottomSheet(
-                context,
-                [
-                  SheetItem(
-                    title: const Text("删除"),
-                    onPressed: () {
-                      updateSearchHistory(keyword, isDelete: true);
-                    },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "搜索历史",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    openBottomSheet(
+                      context,
+                      [
+                        SheetItem(
+                          title: const Text("清空搜索历史"),
+                          onPressed: () {
+                            clearSearchHistory();
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                  child: const Text(
+                    "清空",
+                    style: TextStyle(color: Colors.grey),
                   ),
-                ],
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.only(
-                top: 6,
-                bottom: 6,
-                left: 12,
-                right: 12,
-              ),
-              child: Text(keyword),
+                ),
+              ],
             ),
-          );
-        }).toList(),
+          ),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _searchHistory.map((keyword) {
+              return InkWell(
+                borderRadius: const BorderRadius.all(Radius.circular(4)),
+                onTap: () {
+                  _keywordController.text = keyword;
+                  _searchHandler(true);
+                },
+                onLongPress: () {
+                  openBottomSheet(
+                    context,
+                    [
+                      SheetItem(
+                        title: const Text("删除"),
+                        onPressed: () {
+                          updateSearchHistory(keyword, isDelete: true);
+                        },
+                      ),
+                    ],
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.only(
+                    top: 6,
+                    bottom: 6,
+                    left: 12,
+                    right: 12,
+                  ),
+                  child: Text(keyword),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
