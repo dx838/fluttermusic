@@ -341,7 +341,7 @@ class BiliClient implements OriginService {
           }
         }
       }
-    }}
+    }}}
     // 单个合集
     //
     Map<String, String> query;
