@@ -180,7 +180,7 @@ class BiliSearchResponse extends SearchResponse {
             duration: j['duration'] is String
               ? duration2seconds(j['duration'])
               : j['duration'],
-            author: selist['meta']['mid']?.toString() ?? '',
+            author: '${selist['meta']['mid']?.toString() ?? ''} ${selist['meta']['name']?.toString() ?? ''}',
             origin: OriginType.bili,
           );
           musicList.add(item);
@@ -191,7 +191,7 @@ class BiliSearchResponse extends SearchResponse {
             duration: j['duration'] is String
               ? duration2seconds(j['duration'])
               : j['duration'],
-            author: selist['meta']['mid']?.toString() ?? "",
+            author: '${selist['meta']['name']?.toString() ?? ''} ${selist['meta']['mid']?.toString() ?? ''}',
             origin: OriginType.bili,
             type: SearchType.order,
             musicList: musicList,
