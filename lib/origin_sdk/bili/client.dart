@@ -287,7 +287,7 @@ class BiliClient implements OriginService {
     if (match != null) {
       uid = match.group(1) ?? '';
       fid = match.group(2) ?? '';
-      vType = '30';
+      vType = '40';
     } else {
     // 单个合集
     // https://space.bilibili.com/476861585/lists/8012159?type=season
