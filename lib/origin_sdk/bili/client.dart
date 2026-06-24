@@ -279,27 +279,17 @@ class BiliClient implements OriginService {
     String? fid;
     String url = 'https://api.bilibili.com/x/web-interface/wbi/search/type';
     
-    // 单个合集完整url
-    // https://space.bilibili.com/476861585/lists/8012159?type=season
-    strRegex = RegExp(r'space\.bilibili\.com/(\d+)/lists/(\d+)\?type=season');
-    match = strRegex.firstMatch(params.keyword);
+    // 单个系列完整url
+    // https://space.bilibili.com/476861585/lists/4909851?type=series
+    strRegex = RegExp(r'space\.bilibili\.com/(\d+)/lists/(\d+)\?type=series');
+    match = strRegex.firstMatch(params.keyword);      
     if (match != null) {
-      uid = match.group(1) ?? '';  // up id
-      fid = match.group(2) ?? '';  // 合集 id
-      // BotToast.showText(
-      //           text: 'List uid: $uid, fid: $fid');
-      vType = '10';
+      uid = match.group(1) ?? '';
+      fid = match.group(2) ?? '';
+      vType = '40';
     } else {
-      // 单个系列完整url
-      // https://space.bilibili.com/476861585/lists/4909851?type=series
-      strRegex = RegExp(r'space\.bilibili\.com/(\d+)/lists/(\d+)\?type=series');
-      match = strRegex.firstMatch(params.keyword);
-      if (match != null) {
-        uid = match.group(1) ?? '';
-        fid = match.group(2) ?? '';
-        vType = '40';
-      } else {
     // 单个合集
+    // https://space.bilibili.com/476861585/lists/8012159?type=season
     // https://space.bilibili.com/476861585/lists/8012159
     strRegex = RegExp(r'space\.bilibili\.com/(\d+)/lists/(\d+)');
     match = strRegex.firstMatch(params.keyword);
@@ -343,7 +333,7 @@ class BiliClient implements OriginService {
           }
         }
       }
-    }}}
+    }}
     // 单个合集
     //
     Map<String, String> query;
