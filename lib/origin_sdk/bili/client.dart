@@ -275,6 +275,7 @@ class BiliClient implements OriginService {
     // 20: 合集和系列视频
     // 30: UP 单个系列视频
     // 40: UP 系列视频
+    // 50: UP 关键词搜索
     String? uid;
     String? fid;
     String url = 'https://api.bilibili.com/x/web-interface/wbi/search/type';
@@ -286,7 +287,7 @@ class BiliClient implements OriginService {
     if (match != null) {
       uid = match.group(1) ?? '';
       fid = match.group(2) ?? '';
-      vType = '40';
+      vType = '30';
     } else {
     // 单个合集
     // https://space.bilibili.com/476861585/lists/8012159?type=season
@@ -323,6 +324,13 @@ class BiliClient implements OriginService {
           fid = match.group(2) ?? '';
           vType = '30';
         } else {
+          strRegex = RegExp(r'(\d+) (\w+)');
+          match = strRegex.firstMatch(params.keyword);
+          if (match != null) {
+            uid = match.group(1) ?? '';
+            fid = match.group(2) ?? '';
+            vType = '50';
+          } else {
           // 系列视频
           // https://www.bilibili.com/list/476861585
           strRegex = RegExp(r'bilibili\.com/list/(\d+)/');
@@ -375,9 +383,18 @@ class BiliClient implements OriginService {
         url = 'https://api.bilibili.com/x/polymer/web-space/home/seasons_series';
         query = _signParams({
           'mid': uid.toString() ?? '',          // 字符串 
-          'season_id': fid.toString() ?? '',    // 字符串
           'page_num': params.page.toString(),
           'page_size': '20',
+        });
+        break;
+      case '50':
+        // UP 视频搜索
+        url = 'https://api.bilibili.com/x/series/recArchivesByKeywords';
+        query = _signParams({
+          'mid': uid.toString() ?? '',          // 字符串 
+          'keywords': fid.toString() ?? '',          // 字符串 
+          'pn': params.page.toString(),
+          'ps': '20',
         });
         break;
       default:
